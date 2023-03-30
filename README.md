@@ -1,6 +1,6 @@
-## Fermax Blue Intercom Script
+# Fermax Blue Intercom Script
 
-# Usage
+## Usage
 
 1. Clone the repository and navigate to the root directory.
 2. Install the requests module by running pip install requests.
@@ -8,7 +8,16 @@
 4. If you want to avoid extra fetching, you can also provide the optional --deviceId and --accessId arguments.
 5. The script will output a message indicating whether the door was successfully opened or not.
 
-# Arguments
+###
+
+You can use it with Home Assistant adding this script in your configuration (also in `python_scripts` directory) using the `shell_command` integration:
+
+```
+shell_command:
+  open_door: 'python3 python_scripts/open_door.py --username=<USERNAME> --password=<PASSWORD> --deviceId=<DEVICE_ID> --accessId=<ACCESS_ID_JSON>'
+```
+
+## Arguments
 
 -   `--username`: Required. Fermax Blue account username.
 -   `--password`: Required. Fermax Blue account password.
@@ -16,7 +25,7 @@
 -   `--accessId`: Optional. Access ID to avoid extra fetching (use with deviceId).
 -   `--cache`: Optional. Set to False if you don't want to use the cache to save the auth token (enabled by default).
 
-# How it works
+## How it works
 
 The script sends an HTTP request to the Fermax Blue Servers to authenticate the user and obtain an access token. The access token is cached into a JSON file (in the script directory) to avoid unnecessary API calls in the future.
 
@@ -24,6 +33,6 @@ The script then sends another HTTP request to the Fermax Blue Servers to obtain 
 
 Finally, the script sends a third HTTP request to the Fermax Blue API to open the door.
 
-# Disclaimer
+## Disclaimer
 
 This script was tested on a Fermax 9449.
