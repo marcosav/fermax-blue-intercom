@@ -4,6 +4,7 @@ import logging
 import argparse
 import datetime
 import os
+import time
 
 from urllib.parse import quote
 
@@ -17,8 +18,8 @@ parser.add_argument('--password', type=str,
                     help='Fermax Blue account password', required=True)
 parser.add_argument('--deviceId', type=str,
                     help='Optional deviceId to avoid extra fetching (requires accessId)')
-parser.add_argument('--accessId', type=str,
-                    help='Optional accessId to avoid extra fetching (use with deviceId)')
+parser.add_argument('--accessId', type=str, nargs='+',
+                    help='Optional accessId(s) to avoid extra fetching (use with deviceId)')
 parser.add_argument('--cache', type=bool,
                     help='Optionally set if cache is used to save auth token (enabled by default)', default=True)
 args = parser.parse_args()
@@ -26,14 +27,16 @@ args = parser.parse_args()
 username = args.username
 password = args.password
 deviceId = args.deviceId
-accessId = args.accessId
+accessIds = args.accessId
 cache = args.cache
 
-if (deviceId and not accessId) or (accessId and not deviceId):
+if (deviceId and not accessIds) or (accessIds and not deviceId):
     raise Exception('Both deviceId and accessId must be provided')
 
-if accessId:
-    accessId = json.loads(accessId)
+provided_doors = deviceId and accessIds
+
+if provided_doors:
+    accessIds = list(map(lambda accessId: json.loads(accessId), accessIds))
 
 
 CACHE_FILENAME = 'portal_cache.json'
@@ -136,7 +139,17 @@ def pairings(bearer_token: str) -> tuple:
     if not parsed_json:
         raise Exception('There are no pairings')
 
-    return (parsed_json[0]['tag'], parsed_json[0]['deviceId'], parsed_json[0]['accessDoorMap']['ZERO']['accessId'])
+    pairing = parsed_json[0]
+    tag = pairing['tag']
+    deviceId = pairing['deviceId']
+    accessDoorMap = pairing['accessDoorMap']
+
+    accessIds = []
+    for d in accessDoorMap.values():
+        if d['visible']:
+            accessIds.append(d['accessId'])
+
+    return (tag, deviceId, accessIds)
 
 
 def directed_opendoor(bearer_token: str, deviceId: str, accessId: str) -> str:
@@ -164,18 +177,26 @@ if not access_token:
 
 bearer_token = f'Bearer {access_token}'
 
-if not deviceId:
+if not provided_doors:
     logging.info('Success, getting devices...')
 
-    tag, deviceId, accessId = pairings(bearer_token)
+    tag, deviceId, accessIds = pairings(bearer_token)
 
     logging.info(
-        f'Found {tag} with deviceId {deviceId}, calling directed opendoor...')
+        f'Found {tag} with deviceId {deviceId} ({len(accessIds)} doors), calling directed opendoor...')
 
 else:
     logging.info(
         f'Success, using provided deviceId {deviceId}, calling directed opendoor...')
 
-result = directed_opendoor(bearer_token, deviceId, accessId)
+# If user provided doors we open them all
+if provided_doors:
+    for accessId in accessIds:
+        result = directed_opendoor(bearer_token, deviceId, accessId)
+        logging.info(f'Result: {result}')
+        time.sleep(7)
 
-logging.info(f'Result: {result}')
+# Otherwise we just open the first one (ZERO?)
+else:
+    result = directed_opendoor(bearer_token, deviceId, accessIds[0])
+    logging.info(f'Result: {result}')

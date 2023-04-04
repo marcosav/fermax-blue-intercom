@@ -14,7 +14,7 @@ You can use it with Home Assistant adding this script in your configuration (als
 
 ```
 shell_command:
-  open_door: 'python3 python_scripts/open_door.py --username=<USERNAME> --password=<PASSWORD> --deviceId=<DEVICE_ID> --accessId=<ACCESS_ID_JSON>'
+  open_door: 'python3 python_scripts/open_door.py --username USERNAME --password PASSWORD [--deviceId DEVICEID] [--accessId ACCESSID_JSON [ACCESSID_JSON ...]] [--cache CACHE]'
 ```
 
 ## Arguments
@@ -22,8 +22,34 @@ shell_command:
 -   `--username`: Required. Fermax Blue account username.
 -   `--password`: Required. Fermax Blue account password.
 -   `--deviceId`: Optional. Device ID to avoid extra fetching (requires accessId).
--   `--accessId`: Optional. Access ID to avoid extra fetching (use with deviceId).
+-   `--accessId`: Optional. Access ID(s) to avoid extra fetching (use with deviceId).
 -   `--cache`: Optional. Set to False if you don't want to use the cache to save the auth token (enabled by default).
+
+## Examples
+
+### Opening first door (maybe ZERO?)
+
+```bash
+open_door.py --username email@domain.com --password yourpassword
+```
+
+### Opening first door and disabling auth token cache
+
+```bash
+open_door.py --username email@domain.com --password yourpassword --cache False
+```
+
+### Opening the provided door
+
+```bash
+open_door.py --username email@domain.com --password yourpassword --deviceId 12345 --accessId '{"subblock": 0, "block": 0, "number": 0}'
+```
+
+### Opening multiple doors
+
+```bash
+open_door.py --username email@domain.com --password yourpassword --deviceId 12345 --accessId '{"subblock": 0, "block": 0, "number": 0}' '{"subblock": 1, "block": 1, "number": 1}'
+```
 
 ## How it works
 
