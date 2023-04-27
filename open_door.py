@@ -110,6 +110,10 @@ def auth(cache: bool, username: str, password: str) -> str:
         'POST', AUTH_URL, headers=AUTH_HEADERS, data=auth_payload)
 
     parsed_json = response.json()
+    if 'error' in parsed_json:
+        raise RuntimeError(parsed_json['error_description'])
+        
+    
     access_token = parsed_json['access_token']
     max_age = parsed_json['expires_in']
 
