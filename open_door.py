@@ -21,7 +21,9 @@ parser.add_argument('--deviceId', type=str,
 parser.add_argument('--accessId', type=str, nargs='+',
                     help='Optional accessId(s) to avoid extra fetching (use with deviceId)')
 parser.add_argument('--cache', type=bool,
-                    help='Optionally set if cache is used to save auth token (enabled by default)', default=True)
+                    help='Optionally set if cache is used to save/read auth token (enabled by default)', default=True)
+parser.add_argument('--reauth', action='store_true',
+                    help='Forces authentication (when using this option no door will be open)')
 args = parser.parse_args()
 
 username = args.username
@@ -29,6 +31,7 @@ password = args.password
 deviceId = args.deviceId
 accessIds = args.accessId
 cache = args.cache
+reauth = args.reauth
 
 if (deviceId and not accessIds) or (accessIds and not deviceId):
     raise Exception('Both deviceId and accessId must be provided')
@@ -112,8 +115,7 @@ def auth(cache: bool, username: str, password: str) -> str:
     parsed_json = response.json()
     if 'error' in parsed_json:
         raise RuntimeError(parsed_json['error_description'])
-        
-    
+
     access_token = parsed_json['access_token']
     max_age = parsed_json['expires_in']
 
@@ -171,7 +173,7 @@ def directed_opendoor(bearer_token: str, deviceId: str, accessId: str) -> str:
 
 access_token = None
 
-if cache:
+if cache and not reauth:
     access_token = read_cached_token()
 
 if not access_token:
@@ -193,14 +195,15 @@ else:
     logging.info(
         f'Success, using provided deviceId {deviceId}, calling directed opendoor...')
 
-# If user provided doors we open them all
-if provided_doors:
-    for accessId in accessIds:
-        result = directed_opendoor(bearer_token, deviceId, accessId)
-        logging.info(f'Result: {result}')
-        time.sleep(7)
+if not reauth:
+    # If user provided doors we open them all
+    if provided_doors:
+        for accessId in accessIds:
+            result = directed_opendoor(bearer_token, deviceId, accessId)
+            logging.info(f'Result: {result}')
+            time.sleep(7)
 
-# Otherwise we just open the first one (ZERO?)
-else:
-    result = directed_opendoor(bearer_token, deviceId, accessIds[0])
-    logging.info(f'Result: {result}')
+    # Otherwise we just open the first one (ZERO?)
+    else:
+        result = directed_opendoor(bearer_token, deviceId, accessIds[0])
+        logging.info(f'Result: {result}')

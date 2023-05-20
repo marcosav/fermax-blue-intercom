@@ -24,6 +24,7 @@ shell_command:
 -   `--deviceId`: Optional. Device ID to avoid extra fetching (requires accessId).
 -   `--accessId`: Optional. Access ID(s) to avoid extra fetching (use with deviceId).
 -   `--cache`: Optional. Set to False if you don't want to use the cache to save the auth token (enabled by default).
+-   `--reauth`: Optional. Use it to just force reauth, when using this option no door will be open, just use it to refresh the token, check your credentials...
 
 ## Examples
 
@@ -49,6 +50,12 @@ open_door.py --username email@domain.com --password yourpassword --deviceId 1234
 
 ```bash
 open_door.py --username email@domain.com --password yourpassword --deviceId 12345 --accessId '{"subblock": 0, "block": 0, "number": 0}' '{"subblock": 1, "block": 1, "number": 1}'
+```
+
+### Force authentication
+
+```bash
+open_door.py --username email@domain.com --password yourpassword --reauth
 ```
 
 ## How it works
