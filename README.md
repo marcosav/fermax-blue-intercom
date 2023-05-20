@@ -3,19 +3,10 @@
 ## Usage
 
 1. Clone the repository and navigate to the root directory.
-2. Install the requests module by running pip install requests.
-3. Run the script with the required arguments: python3 open_door.py --username <USERNAME> --password <PASSWORD>.
-4. If you want to avoid extra fetching, you can also provide the optional --deviceId and --accessId arguments.
+2. Install the requests module by running `pip install requests`.
+3. Run the script with the required arguments: `python3 open_door.py --username <USERNAME> --password <PASSWORD>`.
+4. If you want to avoid extra fetching, you can also provide the optional `--deviceId` and `--accessId` arguments.
 5. The script will output a message indicating whether the door was successfully opened or not.
-
-###
-
-You can use it with Home Assistant adding this script in your configuration (also in `python_scripts` directory) using the `shell_command` integration:
-
-```
-shell_command:
-  open_door: 'python3 python_scripts/open_door.py --username USERNAME --password PASSWORD [--deviceId DEVICEID] [--accessId ACCESSID_JSON [ACCESSID_JSON ...]] [--cache CACHE]'
-```
 
 ## Arguments
 
@@ -27,6 +18,19 @@ shell_command:
 -   `--reauth`: Optional. Use it to just force reauth, when using this option no door will be open, just use it to refresh the token, check your credentials...
 
 ## Examples
+
+### Home Assistant
+
+You can use this script with Home Assistant using the `shell_command` integration.
+
+Save it in a directory under `config`, something like `your_home_assistant_dir/config/python_scripts/open_door.py`, then add the following to your `configuration.yaml`:
+
+*NOTE: Check how it is used in the examples below.*
+
+```
+shell_command:
+  open_door: 'python3 python_scripts/open_door.py --username USERNAME --password PASSWORD ...'
+```
 
 ### Opening first door (maybe ZERO?)
 
