@@ -107,6 +107,7 @@ AUTH_HEADERS.update(COMMON_HEADERS)
 
 def auth(cache: bool, username: str, password: str) -> str:
     username = quote(username)
+    password = quote(password)
     auth_payload = f'grant_type=password&password={password}&username={username}'
 
     response = requests.request(
