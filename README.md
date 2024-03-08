@@ -14,7 +14,7 @@
 -   `--password`: Required. Fermax Blue account password.
 -   `--deviceId`: Optional. Device ID to avoid extra fetching (requires accessId).
 -   `--accessId`: Optional. Access ID(s) to avoid extra fetching (use with deviceId).
--   `--cache`: Optional. Set to False if you don't want to use the cache to save the auth token (enabled by default).
+-   `--no-cache`: Optional. Disables auth token cache usage (read/write).
 -   `--reauth`: Optional. Use it to just force reauth, when using this option no door will be open, just use it to refresh the token, check your credentials...
 
 ## Examples
@@ -41,7 +41,7 @@ open_door.py --username email@domain.com --password yourpassword
 ### Opening first door and disabling auth token cache
 
 ```bash
-open_door.py --username email@domain.com --password yourpassword --cache False
+open_door.py --username email@domain.com --password yourpassword --no-cache
 ```
 
 ### Opening the provided door
@@ -72,4 +72,4 @@ Finally, the script sends a third HTTP request to the Fermax Blue API to open th
 
 ## Disclaimer
 
-This script was tested on a Fermax 9449.
+This script was tested on a Fermax 9449 using Python 3.9.

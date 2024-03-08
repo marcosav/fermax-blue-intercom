@@ -189,11 +189,10 @@ def main() -> None:
                         help='Optional deviceId to avoid extra fetching (requires accessId)')
     parser.add_argument('--accessId', type=str, nargs='+',
                         help='Optional accessId(s) to avoid extra fetching (use with deviceId)')
-    parser.add_argument('--cache', type=bool,
-                        help='Optionally set if cache is used to save/read auth token (enabled by default)',
-                        default=True)
+    parser.add_argument('--no-cache', action='store_false', dest='cache',
+                        help='Disables auth token cache usage (read/write)')
     parser.add_argument('--reauth', action='store_true',
-                        help='Forces authentication (when using this option no door will be open)')
+                        help='Forces authentication refresh (when using this option no door will be open)')
     args = parser.parse_args()
 
     username = args.username
