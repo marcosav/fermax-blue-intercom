@@ -29,152 +29,157 @@ class OAuthTokenResponse():
     jti: str
     
     
-class CachedTokenData():
+class TokenData():
+
     def __init__(self, access_token: str, refresh_token: str, expires_at: datetime.datetime):
         self.access_token = access_token
         self.refresh_token = refresh_token
         self.expires_at = expires_at
 
 
-def update_cached_token(response: OAuthTokenResponse):
-    LOGGER.info('Caching token...')
+class BlueClient():
 
-    now = datetime.datetime.utcnow()
+    def __init__(self, cache: bool=True):
+        self._cache = cache
+        
+        self._token_data: Optional[TokenData] = None
+        
+        if self._cache:
+            self._load_cached_token()
 
-    cached_content: CachedTokenData = {
-        'access_token': response.access_token,
-        'refresh_token': response.refresh_token,
-        'expires_at': now + datetime.timedelta(seconds=response.expires_in),
+    def _parse_token(self, response: OAuthTokenResponse) -> TokenData:
+        now = datetime.datetime.utcnow()
+
+        return TokenData(
+            access_token=response.access_token,
+            refresh_token=response.refresh_token,
+            expires_at=now + datetime.timedelta(seconds=response.expires_in),
+        )
+
+    def _save_token(self, token_data: TokenData):
+        with open(cache_file_path, 'w') as file:
+            json.dump(token_data.__dict__, file, default=self._datetime_handler)
+
+    def _load_cached_token(self):
+        try:
+            with open(cache_file_path, 'r') as file:
+                cached_content = json.load(file)
+                cached_content['expires_at'] = datetime.datetime.fromisoformat(cached_content['expires_at'])
+                
+                self._token_data = TokenData(**cached_content)
+            
+        except FileNotFoundError:
+            LOGGER.info('Cache file not found')
+        
+        except:
+            LOGGER.info('There was some error while reading cache file')
+        
+    def needs_refresh(self):
+        return not self._token_data or datetime.datetime.utcnow() >= self._token_data.expires_at
+
+    # Fake client app and iOS device
+    COMMON_HEADERS = {
+        'app-version': '3.2.1',
+        'accept-language': 'en-ES;q=1.0, es-ES;q=0.9, ru-ES;q=0.8',
+        'phone-os': '16.4',
+        'user-agent': 'Blue/3.2.1 (com.fermax.bluefermax; build:3; iOS 16.4.0) Alamofire/3.2.1',
+        'phone-model': 'iPad14,5',
+        'app-build': '3'
     }
 
-    with open(cache_file_path, 'w') as file:
-        json.dump(cached_content, file, default=datetime_handler)
+    AUTH_URL = 'https://oauth.blue.fermax.com/oauth/token'
 
+    AUTH_HEADERS = {
+        'Authorization': 'Basic ZHB2N2lxejZlZTVtYXptMWlxOWR3MWQ0MnNseXV0NDhrajBtcDVmdm81OGo1aWg6Yzd5bGtxcHVqd2FoODV5aG5wcnYwd2R2eXp1dGxjbmt3NHN6OTBidWxkYnVsazE=',
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+    AUTH_HEADERS.update(COMMON_HEADERS)
 
-def read_cached_token() -> Optional[CachedTokenData]:
-    try:
-        with open(cache_file_path, 'r') as file:
-            cached_content = json.load(file)
-            cached_content['expires_at'] = datetime.datetime.fromisoformat(cached_content['expires_at'])
-            return CachedTokenData(**cached_content)
+    @staticmethod
+    def _datetime_handler(obj):
+        if isinstance(obj, datetime.datetime): 
+            return obj.isoformat() 
+        raise TypeError(f"Type {type(obj)} not serializable")
+
+    def auth(self, username: str, password: str): 
+        LOGGER.info('Logging in into Blue...')
         
-    except FileNotFoundError:
-        LOGGER.info('Cache file not found')
-        return None
+        username = quote(username)
+        password = quote(password)
+        auth_payload = f'grant_type=password&password={password}&username={username}'
+
+        response = requests.request(
+            'POST', self.AUTH_URL, headers=self.AUTH_HEADERS, data=auth_payload)
+
+        self._handle_oauth_response(response)
+
+    def refresh_token(self):
+        LOGGER.info('Refreshing session...')
+        
+        auth_payload = f'grant_type=refresh_token&refresh_token={self._token_data.refresh_token}'
+        response = requests.request(
+            'POST', self.AUTH_URL, headers=self.AUTH_HEADERS, data=auth_payload)
+        
+        self._handle_oauth_response(response)
     
-    except:
-        LOGGER.info('There was some error while reading cache file')
-        return None
-    
+    def needs_auth(self):
+        return not self._token_data
 
-def should_refresh(cached_token: CachedTokenData):
-    return datetime.datetime.utcnow() >= cached_token.expires_at
+    def _handle_oauth_response(self, response: requests.Response):
+        parsed_response = response.json()
+        if 'error' in parsed_response:
+            raise RuntimeError(parsed_response['error_description'])
+        
+        oauth_response = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
+        
+        token_data = self._parse_token(oauth_response)
+        
+        self._token_data = token_data
+        
+        if self._cache:
+            self._save_token(token_data)
 
-# Fake client app and iOS device
-COMMON_HEADERS = {
-    'app-version': '3.2.1',
-    'accept-language': 'en-ES;q=1.0, es-ES;q=0.9, ru-ES;q=0.8',
-    'phone-os': '16.4',
-    'user-agent': 'Blue/3.2.1 (com.fermax.bluefermax; build:3; iOS 16.4.0) Alamofire/3.2.1',
-    'phone-model': 'iPad14,5',
-    'app-build': '3'
-}
+    def _get_json_headers(self) -> Dict[str, str]:
+        bearer_token = f'Bearer {self._token_data.access_token}'
+        
+        headers = {'Authorization': bearer_token,
+                'Content-Type': 'application/json'}
+        headers.update(self.COMMON_HEADERS)
 
+        return headers
 
-AUTH_URL = 'https://oauth.blue.fermax.com/oauth/token'
+    PAIRINGS_URL = 'https://blue.fermax.com/pairing/api/v3/pairings/me'
 
-AUTH_HEADERS = {
-    'Authorization': 'Basic ZHB2N2lxejZlZTVtYXptMWlxOWR3MWQ0MnNseXV0NDhrajBtcDVmdm81OGo1aWg6Yzd5bGtxcHVqd2FoODV5aG5wcnYwd2R2eXp1dGxjbmt3NHN6OTBidWxkYnVsazE=',
-    'Content-Type': 'application/x-www-form-urlencoded'
-}
-AUTH_HEADERS.update(COMMON_HEADERS)
+    def pairings(self) -> tuple:
+        response = requests.request(
+            'GET', self.PAIRINGS_URL, headers=self._get_json_headers(), data={})
 
+        parsed_json = response.json()
 
-def datetime_handler(obj):
-    if isinstance(obj, datetime.datetime): 
-        return obj.isoformat() 
-    raise TypeError("Type not serializable")
-    
+        if not parsed_json:
+            raise Exception('There are no pairings')
 
-def auth(cache: bool, username: str, password: str) -> OAuthTokenResponse:
-    username = quote(username)
-    password = quote(password)
-    auth_payload = f'grant_type=password&password={password}&username={username}'
+        pairing = parsed_json[0]
+        tag = pairing['tag']
+        device_id = pairing['deviceId']
+        access_door_map = pairing['accessDoorMap']
 
-    response = requests.request(
-        'POST', AUTH_URL, headers=AUTH_HEADERS, data=auth_payload)
+        access_ids = []
+        for d in access_door_map.values():
+            if d['visible']:
+                access_ids.append(d['accessId'])
 
-    parsed_response = response.json()
-    if 'error' in parsed_response:
-        raise RuntimeError(parsed_response['error_description'])
+        return tag, device_id, access_ids
 
-    oauth_response = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
+    def directed_opendoor(self, device_id: str, access_id: str) -> str:
+        directed_opendoor_url = f'https://blue.fermax.com/deviceaction/api/v1/device/{device_id}/directed-opendoor'
 
-    if cache:
-        update_cached_token(oauth_response)
+        payload = json.dumps(access_id)
 
-    return oauth_response
+        response = requests.request(
+            'POST', directed_opendoor_url, headers=self._get_json_headers(), data=payload)
 
-
-def refresh_token(cache: bool, refresh_token: str) -> OAuthTokenResponse:
-    auth_payload = f'grant_type=refresh_token&refresh_token={refresh_token}'
-    response = requests.request(
-        'POST', AUTH_URL, headers=AUTH_HEADERS, data=auth_payload)
-    
-    parsed_response = response.json()
-    if 'error' in parsed_response:
-        raise RuntimeError(parsed_response['error_description'])
-    
-    oauth_response = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
-    
-    if cache:
-        update_cached_token(oauth_response)
-    
-    return oauth_response
-
-
-def get_json_headers(bearer_token: str) -> Dict[str, str]:
-    headers = {'Authorization': bearer_token,
-               'Content-Type': 'application/json'}
-    headers.update(COMMON_HEADERS)
-
-    return headers
-
-
-PAIRINGS_URL = 'https://blue.fermax.com/pairing/api/v3/pairings/me'
-
-
-def pairings(bearer_token: str) -> tuple:
-    response = requests.request(
-        'GET', PAIRINGS_URL, headers=get_json_headers(bearer_token), data={})
-
-    parsed_json = response.json()
-
-    if not parsed_json:
-        raise Exception('There are no pairings')
-
-    pairing = parsed_json[0]
-    tag = pairing['tag']
-    device_id = pairing['deviceId']
-    access_door_map = pairing['accessDoorMap']
-
-    access_ids = []
-    for d in access_door_map.values():
-        if d['visible']:
-            access_ids.append(d['accessId'])
-
-    return tag, device_id, access_ids
-
-
-def directed_opendoor(bearer_token: str, device_id: str, access_id: str) -> str:
-    directed_opendoor_url = f'https://blue.fermax.com/deviceaction/api/v1/device/{device_id}/directed-opendoor'
-
-    payload = json.dumps(access_id)
-
-    response = requests.request(
-        'POST', directed_opendoor_url, headers=get_json_headers(bearer_token), data=payload)
-
-    return response.text
+        return response.text
 
 
 def main() -> None:
@@ -212,31 +217,21 @@ def main() -> None:
 
     # Program
 
-    oauth_token = None
+    client = BlueClient(cache)
 
-    if cache:
-        oauth_token = read_cached_token()
+    if client.needs_auth():
+        client.auth(username, password)
 
-        
-    if oauth_token and (reauth or should_refresh(oauth_token)):
-        LOGGER.info('Refreshing Blue session...')
-        oauth_token = refresh_token(cache, oauth_token.refresh_token)
-    else:
-        LOGGER.info('Logging in into Blue...')
-        oauth_token = auth(cache, username, password)
-
-
-    bearer_token = f'Bearer {oauth_token.access_token}'
-
+    elif client.needs_refresh():
+        client.refresh_token()
 
     if reauth:
         exit()
-
-
+    
     if not provided_doors:
         LOGGER.info('Success, getting devices...')
 
-        tag, device_id, access_ids = pairings(bearer_token)
+        tag, device_id, access_ids = client.pairings()
 
         LOGGER.info(
             f'Found {tag} with deviceId {device_id} ({len(access_ids)} doors), calling directed opendoor...')
@@ -245,17 +240,16 @@ def main() -> None:
         LOGGER.info(
             f'Success, using provided deviceId {device_id}, calling directed opendoor...')
 
-
     # If user provided doors we open them all
     if provided_doors:
         for access_id in access_ids:
-            result = directed_opendoor(bearer_token, device_id, access_id)
+            result = client.directed_opendoor(device_id, access_id)
             LOGGER.info(f'Result: {result}')
             time.sleep(7)
 
     # Otherwise we just open the first one (ZERO?)
     else:
-        result = directed_opendoor(bearer_token, device_id, access_ids[0])
+        result = client.directed_opendoor(device_id, access_ids[0])
         LOGGER.info(f'Result: {result}')
 
 
