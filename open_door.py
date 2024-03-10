@@ -6,10 +6,7 @@ import logging
 import argparse
 import datetime
 import os
-import time
 import httpx
-
-from urllib.parse import quote
 
 from types import SimpleNamespace
 
@@ -40,6 +37,14 @@ class TokenData:
         self.expires_at = expires_at
 
 
+class AuthError(Exception):
+    pass
+
+
+class NoPairingsError(Exception):
+    pass
+
+
 class BlueClient:
 
     # Fake client app and iOS device
@@ -54,7 +59,6 @@ class BlueClient:
 
     AUTH_URL = "https://oauth.blue.fermax.com/oauth/token"
     BASE_URL = "https://blue.fermax.com"
-    PAIRINGS_URL = f"{BASE_URL}/pairing/api/v3/pairings/me"
 
     AUTH_HEADERS = {
         "Authorization": "Basic ZHB2N2lxejZlZTVtYXptMWlxOWR3MWQ0MnNseXV0NDhrajBtcDVmdm81OGo1aWg6Yzd5bGtxcHVqd2FoODV5aG5wcnYwd2R2eXp1dGxjbmt3NHN6OTBidWxkYnVsazE=",
@@ -146,39 +150,51 @@ class BlueClient:
         )
 
     def _handle_oauth_response(self, response: httpx.Response):
-        parsed_response = response.json()
-        if "error" in parsed_response:
-            raise RuntimeError(parsed_response["error_description"])
+        if response.is_success:
+            oauth_response = json.loads(
+                response.text, object_hook=lambda d: SimpleNamespace(**d)
+            )
 
-        oauth_response = json.loads(
-            response.text, object_hook=lambda d: SimpleNamespace(**d)
-        )
+            token_data = self._parse_token(oauth_response)
 
-        token_data = self._parse_token(oauth_response)
+            self._token_data = token_data
 
-        self._token_data = token_data
+            if self._cache:
+                self._save_token(token_data)
 
-        if self._cache:
-            self._save_token(token_data)
+        elif response.is_client_error:
+            parsed_response = response.json()
+            raise AuthError(
+                f'{parsed_response["error"]} - {parsed_response.get("error_description", "")}'
+            )
+
+        else:
+            raise AuthError(
+                f"Server error - {response.status_code} - {response.content}"
+            )
 
     def _get_json_headers(self) -> Dict[str, str]:
         bearer_token = f"Bearer {self._token_data.access_token}"
 
-        headers = {"Authorization": bearer_token, "Content-Type": "application/json"}
-        headers.update(self.COMMON_HEADERS)
+        headers = {
+            "Authorization": bearer_token,
+            "Content-Type": "application/json",
+            **self.COMMON_HEADERS,
+        }
 
         return headers
 
     async def pairings(self) -> tuple:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                self.PAIRINGS_URL, headers=self._get_json_headers()
+                f"{self.BASE_URL}/pairing/api/v3/pairings/me",
+                headers=self._get_json_headers(),
             )
 
         parsed_json = response.json()
 
         if not parsed_json:
-            raise Exception("There are no pairings")
+            raise NoPairingsError()
 
         pairing = parsed_json[0]
         tag = pairing["tag"]
@@ -206,7 +222,6 @@ class BlueClient:
 
 
 async def main() -> None:
-    # Input values
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -253,8 +268,6 @@ async def main() -> None:
 
     if provided_doors:
         access_ids = [json.loads(access_id) for access_id in access_ids]
-
-    # Program
 
     client = BlueClient(cache)
 
