@@ -41,6 +41,44 @@ class AuthError(Exception):
     pass
 
 
+class User:
+    def __init__(
+        self,
+        email: str,
+        locale: str,
+        accept_sharing: bool,
+        accept_privacy: bool,
+        enabled: bool,
+        created_at: datetime.datetime,
+        country: str,
+        city: str,
+        area: str,
+        zone: str,
+        subzone: str,
+        pin: Optional[str],
+        pin_date: Optional[str],
+        unique_session: bool,
+        provider: Optional[str],
+        name: Optional[str],
+    ):
+        self.email = email
+        self.locale = locale
+        self.accept_sharing = accept_sharing
+        self.accept_privacy = accept_privacy
+        self.enabled = enabled
+        self.created_at = created_at
+        self.country = country
+        self.city = city
+        self.area = area
+        self.zone = zone
+        self.subzone = subzone
+        self.pin = pin
+        self.pin_date = pin_date
+        self.unique_session = unique_session
+        self.provider = provider
+        self.name = name
+
+
 class AccessId:
     def __init__(self, block: int, subblock: int, number: int):
         self.block = block
@@ -324,6 +362,38 @@ class BlueClient:
 
         if response.is_success:
             return response.text
+
+        else:
+            self._handle_error_response(response)
+
+    async def get_user_info(self) -> User:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.BASE_URL}/user/api/v1/users/me",
+                headers=self._get_json_headers(),
+            )
+
+        if response.is_success:
+            parsed_json = response.json()
+
+            return User(
+                email=parsed_json["email"],
+                locale=parsed_json["locale"],
+                accept_sharing=parsed_json["acceptSharing"],
+                accept_privacy=parsed_json["acceptPrivacy"],
+                enabled=parsed_json["enabled"],
+                created_at=datetime.datetime.fromisoformat(parsed_json["createdAt"]),
+                country=parsed_json["country"],
+                city=parsed_json["city"],
+                area=parsed_json["area"],
+                zone=parsed_json["zone"],
+                subzone=parsed_json["subzone"],
+                pin=parsed_json.get("pin"),
+                pin_date=parsed_json.get("pinDate"),
+                unique_session=parsed_json["uniqueSession"],
+                provider=parsed_json.get("provider"),
+                name=parsed_json.get("name"),
+            )
 
         else:
             self._handle_error_response(response)
