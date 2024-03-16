@@ -152,6 +152,58 @@ class Pairing:
     master: bool
 
 
+class DeviceInfo:
+    def __init__(
+        self,
+        device_id: str,
+        connection_state: str,
+        status: str,
+        installation_id: str,
+        family: str,
+        type: str,
+        subtype: str,
+        num_block: int,
+        num_subblock: int,
+        unit_number: int,
+        connectable: bool,
+        iccid: str,
+        divert_service: str,
+        photocaller: bool,
+        wireless_signal: int,
+        blue_stream: bool,
+        phone: bool,
+        monitor: bool,
+        monitor_or_guard_unit: bool,
+        terminal: bool,
+        panel_or_edibox: bool,
+        panel: bool,
+        streaming_mode: str,
+    ):
+        self.device_id = device_id
+        self.connection_state = connection_state
+        self.status = status
+        self.installation_id = installation_id
+        self.family = family
+        self.type = type
+        self.subtype = subtype
+        self.num_block = num_block
+        self.num_subblock = num_subblock
+        self.unit_number = unit_number
+        self.connectable = connectable
+        self.iccid = iccid
+        self.divert_service = divert_service
+        self.photocaller = photocaller
+        self.wireless_signal = wireless_signal
+        self.blue_stream = blue_stream
+        self.phone = phone
+        self.monitor = monitor
+        self.monitor_or_guard_unit = monitor_or_guard_unit
+        self.terminal = terminal
+        self.panel_or_edibox = panel_or_edibox
+        self.panel = panel
+        self.streaming_mode = streaming_mode
+
+
 class BlueClient:
 
     # Fake client app and iOS device
@@ -171,7 +223,6 @@ class BlueClient:
         "Authorization": "Basic ZHB2N2lxejZlZTVtYXptMWlxOWR3MWQ0MnNseXV0NDhrajBtcDVmdm81OGo1aWg6Yzd5bGtxcHVqd2FoODV5aG5wcnYwd2R2eXp1dGxjbmt3NHN6OTBidWxkYnVsazE=",
         "Content-Type": "application/x-www-form-urlencoded",
     }
-    AUTH_HEADERS.update(COMMON_HEADERS)
 
     def __init__(self, cache: bool = True):
         self._cache = cache
@@ -393,6 +444,45 @@ class BlueClient:
                 unique_session=parsed_json["uniqueSession"],
                 provider=parsed_json.get("provider"),
                 name=parsed_json.get("name"),
+            )
+
+        else:
+            self._handle_error_response(response)
+
+    async def get_device_info(self, device_id: str) -> DeviceInfo:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.BASE_URL}/deviceaction/api/v1/device/{device_id}",
+                headers=self._get_json_headers(),
+            )
+
+        if response.is_success:
+            parsed_json = response.json()
+
+            return DeviceInfo(
+                device_id=parsed_json["deviceId"],
+                connection_state=parsed_json["connectionState"],
+                status=parsed_json["status"],
+                installation_id=parsed_json["installationId"],
+                family=parsed_json["family"],
+                type=parsed_json["type"],
+                subtype=parsed_json["subtype"],
+                num_block=parsed_json["numBlock"],
+                num_subblock=parsed_json["numSubblock"],
+                unit_number=parsed_json["unitNumber"],
+                connectable=parsed_json["connectable"],
+                iccid=parsed_json["iccid"],
+                divert_service=parsed_json["divertService"],
+                photocaller=parsed_json["photocaller"],
+                wireless_signal=parsed_json["wirelessSignal"],
+                blue_stream=parsed_json["blueStream"],
+                phone=parsed_json["phone"],
+                monitor=parsed_json["monitor"],
+                monitor_or_guard_unit=parsed_json["monitorOrGuardUnit"],
+                terminal=parsed_json["terminal"],
+                panel_or_edibox=parsed_json["panelOrEdibox"],
+                panel=parsed_json["panel"],
+                streaming_mode=parsed_json["streamingMode"],
             )
 
         else:
