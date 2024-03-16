@@ -322,7 +322,11 @@ class BlueClient:
                 data=data,
             )
 
-        return response.text
+        if response.is_success:
+            return response.text
+
+        else:
+            self._handle_error_response(response)
 
 
 async def main() -> None:
