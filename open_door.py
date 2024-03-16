@@ -1,4 +1,4 @@
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 import asyncio
 import json
@@ -41,8 +41,77 @@ class AuthError(Exception):
     pass
 
 
-class NoPairingsError(Exception):
-    pass
+class AccessId:
+    def __init__(self, block: int, subblock: int, number: int):
+        self.block = block
+        self.subblock = subblock
+        self.number = number
+
+    block: int
+    subblock: int
+    number: int
+
+
+class AccessDoor:
+    def __init__(self, title: str, access_id: AccessId, visible: bool):
+        self.title = title
+        self.access_id = access_id
+        self.visible = visible
+
+    title: str
+    access_id: AccessId
+    visible: bool
+
+
+class Pairing:
+    def __init__(
+        self,
+        id: str,
+        device_id: str,
+        tag: str,
+        status: str,
+        updated_at: datetime.datetime,
+        created_at: datetime.datetime,
+        app_build: str,
+        app_version: str,
+        phone_model: str,
+        phone_os: str,
+        home: Optional[str],
+        address: Optional[str],
+        access_door_map: Dict[str, AccessDoor],
+        master: bool,
+    ):
+        self.id = id
+        self.device_id = device_id
+        self.tag = tag
+        self.status = status
+        self.updated_at = updated_at
+        self.created_at = created_at
+        self.app_build = app_build
+        self.app_version = app_version
+        self.phone_model = phone_model
+        self.phone_os = phone_os
+        self.home = home
+        self.address = address
+        self.access_door_map = access_door_map
+        self.master = master
+
+    id: str
+    device_id: str
+    tag: str
+    status: str
+    updatedAt: int
+    createdAt: int
+    updated_at: datetime.datetime
+    created_at: datetime.datetime
+    app_build: str
+    app_version: str
+    phone_model: str
+    phone_os: str
+    home: Optional[str]
+    address: Optional[str]
+    access_door_map: Dict[str, AccessDoor]
+    master: bool
 
 
 class BlueClient:
@@ -149,6 +218,18 @@ class BlueClient:
             expires_at=now + datetime.timedelta(seconds=response.expires_in),
         )
 
+    def _handle_error_response(self, response: httpx.Response):
+        if response.is_client_error:
+            parsed_response = response.json()
+            raise AuthError(
+                f'{parsed_response["error"]} - {parsed_response.get("error_description", "")}'
+            )
+
+        else:
+            raise AuthError(
+                f"Server error - {response.status_code} - {response.content}"
+            )
+
     def _handle_oauth_response(self, response: httpx.Response):
         if response.is_success:
             oauth_response = json.loads(
@@ -162,16 +243,8 @@ class BlueClient:
             if self._cache:
                 self._save_token(token_data)
 
-        elif response.is_client_error:
-            parsed_response = response.json()
-            raise AuthError(
-                f'{parsed_response["error"]} - {parsed_response.get("error_description", "")}'
-            )
-
         else:
-            raise AuthError(
-                f"Server error - {response.status_code} - {response.content}"
-            )
+            self._handle_error_response(response)
 
     def _get_json_headers(self) -> Dict[str, str]:
         bearer_token = f"Bearer {self._token_data.access_token}"
@@ -184,32 +257,63 @@ class BlueClient:
 
         return headers
 
-    async def pairings(self) -> tuple:
+    @staticmethod
+    def _parse_pairings(response: httpx.Response) -> List[Pairing]:
+        parsed_json = response.json()
+
+        pairings: List[Pairing] = []
+        for p in parsed_json:
+            access_door_map = {}
+
+            for k, v in p["accessDoorMap"].items():
+                access_id_json = v["accessId"]
+                access_id = AccessId(
+                    block=access_id_json["block"],
+                    subblock=access_id_json["subblock"],
+                    number=access_id_json["number"],
+                )
+                access_door_map[k] = AccessDoor(
+                    title=v["title"],
+                    access_id=access_id,
+                    visible=v["visible"],
+                )
+
+            pairing = Pairing(
+                id=p["id"],
+                device_id=p["deviceId"],
+                tag=p["tag"],
+                status=p["status"],
+                updated_at=datetime.datetime.fromtimestamp(p["updatedAt"] / 1000),
+                created_at=datetime.datetime.fromtimestamp(p["createdAt"] / 1000),
+                app_build=p["appBuild"],
+                app_version=p["appVersion"],
+                phone_model=p["phoneModel"],
+                phone_os=p["phoneOS"],
+                home=p.get("home"),
+                address=p.get("address"),
+                access_door_map=access_door_map,
+                master=p["master"],
+            )
+
+            pairings.append(pairing)
+
+        return pairings
+
+    async def pairings(self) -> List[Pairing]:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{self.BASE_URL}/pairing/api/v3/pairings/me",
                 headers=self._get_json_headers(),
             )
 
-        parsed_json = response.json()
+        if response.is_success:
+            return self._parse_pairings(response)
 
-        if not parsed_json:
-            raise NoPairingsError()
+        else:
+            self._handle_error_response(response)
 
-        pairing = parsed_json[0]
-        tag = pairing["tag"]
-        device_id = pairing["deviceId"]
-        access_door_map = pairing["accessDoorMap"]
-
-        access_ids = []
-        for d in access_door_map.values():
-            if d["visible"]:
-                access_ids.append(d["accessId"])
-
-        return tag, device_id, access_ids
-
-    async def directed_opendoor(self, device_id: str, access_id: str) -> str:
-        data = json.dumps(access_id)
+    async def directed_opendoor(self, device_id: str, access_id: AccessId) -> str:
+        data = json.dumps(access_id.__dict__)
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -233,7 +337,7 @@ async def main() -> None:
     parser.add_argument(
         "--deviceId",
         type=str,
-        help="Optional deviceId to avoid extra fetching (requires accessId)",
+        help="Optional deviceId to avoid extra fetching (requires defining one or multiple accessId)",
     )
     parser.add_argument(
         "--accessId",
@@ -283,11 +387,27 @@ async def main() -> None:
     if not provided_doors:
         LOGGER.info("Success, getting devices...")
 
-        tag, device_id, access_ids = client.pairings()
+        pairings = await client.pairings()
+        if not pairings:
+            raise Exception("No pairings found")
 
-        LOGGER.info(
-            f"Found {tag} with deviceId {device_id} ({len(access_ids)} doors), calling directed opendoor..."
-        )
+        pairing = pairings[0]
+        device_id = pairing.device_id
+        access_ids = [
+            d.access_id for d in pairing.access_door_map.values() if d.visible
+        ]
+
+        if len(pairings) > 1:
+            LOGGER.info(
+                f"Found multiple pairings, opening first one {pairing.tag} with deviceId "
+                f"{pairing.device_id} ({len(access_ids)} doors), use --deviceId and --accessId "
+                f"to specify which one to use."
+            )
+        else:
+            LOGGER.info(
+                f"Found {pairing.tag} with deviceId {pairing.device_id} ({len(access_ids)} "
+                f"doors), calling directed opendoor for the first one..."
+            )
 
     else:
         LOGGER.info(
@@ -296,7 +416,12 @@ async def main() -> None:
 
     # If user provided doors we open them all
     if provided_doors:
-        for access_id in access_ids:
+        for access_id_json in access_ids:
+            access_id = AccessId(
+                block=access_id_json["block"],
+                subblock=access_id_json["subblock"],
+                number=access_id_json["number"],
+            )
             result = await client.directed_opendoor(device_id, access_id)
             LOGGER.info(f"Result: {result}")
 
