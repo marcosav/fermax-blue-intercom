@@ -12,10 +12,11 @@
 
 -   `--username`: Required. Fermax Blue account username.
 -   `--password`: Required. Fermax Blue account password.
--   `--deviceId`: Optional. Device ID to avoid extra fetching (requires accessId).
+-   `--deviceId`: Optional. Device ID to avoid extra fetching (requires accessId when opening doors).
 -   `--accessId`: Optional. Access ID(s) to avoid extra fetching (use with deviceId).
 -   `--no-cache`: Optional. Disables auth token cache usage (read/write).
 -   `--reauth`: Optional. Use it to just force reauth, when using this option no door will be open, just use it to refresh the token, check your credentials...
+-   `--f1`: Optional. Calls the F1 function, optionally specify deviceId.
 
 ## Examples
 
@@ -60,6 +61,16 @@ open_door.py --username email@domain.com --password yourpassword --deviceId 1234
 
 ```bash
 open_door.py --username email@domain.com --password yourpassword --reauth
+```
+
+### F1 *(not properly tested)*
+
+```bash
+open_door.py --username email@domain.com --password yourpassword --f1
+```
+
+```bash
+open_door.py --username email@domain.com --password yourpassword --f1 --deviceId 12345
 ```
 
 ## How it works

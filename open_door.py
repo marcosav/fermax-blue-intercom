@@ -264,10 +264,13 @@ class BlueClient:
             return obj.isoformat()
         raise TypeError(f"Type {type(obj)} not serializable")
 
+    def _create_http_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(timeout=10.0)
+
     async def auth(self, username: str, password: str):
         LOGGER.info("Logging in into Blue...")
 
-        async with httpx.AsyncClient() as client:
+        async with self._create_http_client() as client:
             response = await client.post(
                 self.AUTH_URL,
                 headers=self.AUTH_HEADERS,
@@ -283,7 +286,7 @@ class BlueClient:
     async def refresh_token(self):
         LOGGER.info("Refreshing session...")
 
-        async with httpx.AsyncClient() as client:
+        async with self._create_http_client() as client:
             response = await client.post(
                 self.AUTH_URL,
                 headers=self.AUTH_HEADERS,
@@ -389,7 +392,7 @@ class BlueClient:
         return pairings
 
     async def pairings(self) -> List[Pairing]:
-        async with httpx.AsyncClient() as client:
+        async with self._create_http_client() as client:
             response = await client.get(
                 f"{self.BASE_URL}/pairing/api/v3/pairings/me",
                 headers=self._get_json_headers(),
@@ -404,7 +407,7 @@ class BlueClient:
     async def directed_opendoor(self, device_id: str, access_id: AccessId) -> str:
         data = json.dumps(access_id.__dict__)
 
-        async with httpx.AsyncClient() as client:
+        async with self._create_http_client() as client:
             response = await client.post(
                 f"{self.BASE_URL}/deviceaction/api/v1/device/{device_id}/directed-opendoor",
                 headers=self._get_json_headers(),
@@ -417,8 +420,24 @@ class BlueClient:
         else:
             self._handle_error_response(response)
 
+    async def f1(self, device_id: str) -> str:
+        data = json.dumps({"deviceID": device_id})
+
+        async with self._create_http_client() as client:
+            response = await client.post(
+                f"{self.BASE_URL}/deviceaction/api/v1/device/{device_id}/f1",
+                headers=self._get_json_headers(),
+                data=data,
+            )
+
+        if response.is_success:
+            return response.text
+
+        else:
+            self._handle_error_response(response)
+
     async def get_user_info(self) -> User:
-        async with httpx.AsyncClient() as client:
+        async with self._create_http_client() as client:
             response = await client.get(
                 f"{self.BASE_URL}/user/api/v1/users/me",
                 headers=self._get_json_headers(),
@@ -450,7 +469,7 @@ class BlueClient:
             self._handle_error_response(response)
 
     async def get_device_info(self, device_id: str) -> DeviceInfo:
-        async with httpx.AsyncClient() as client:
+        async with self._create_http_client() as client:
             response = await client.get(
                 f"{self.BASE_URL}/deviceaction/api/v1/device/{device_id}",
                 headers=self._get_json_headers(),
@@ -501,7 +520,7 @@ async def main() -> None:
     parser.add_argument(
         "--deviceId",
         type=str,
-        help="Optional deviceId to avoid extra fetching (requires defining one or multiple accessId)",
+        help="Optional deviceId to avoid extra fetching (requires defining one or multiple accessId when opening doors)",
     )
     parser.add_argument(
         "--accessId",
@@ -520,6 +539,12 @@ async def main() -> None:
         action="store_true",
         help="Forces authentication refresh (when using this option no door will be open)",
     )
+    parser.add_argument(
+        "--f1",
+        action="store_true",
+        help="Calls F1 (optionally specifying deviceId)",
+    )
+    
     args = parser.parse_args()
 
     username = args.username
@@ -528,13 +553,12 @@ async def main() -> None:
     access_ids = args.accessId
     cache = args.cache
     reauth = args.reauth
+    f1 = args.f1
 
-    if (device_id and not access_ids) or (access_ids and not device_id):
-        raise Exception("Both deviceId and accessId must be provided")
+    if (not f1) and ((device_id and not access_ids) or (access_ids and not device_id)):
+        raise Exception("Both deviceId and accessId must be provided when opening doors")
 
-    provided_doors = device_id and access_ids
-
-    if provided_doors:
+    if access_ids:
         access_ids = [json.loads(access_id) for access_id in access_ids]
 
     client = BlueClient(cache)
@@ -547,9 +571,9 @@ async def main() -> None:
 
     if reauth:
         exit()
-
-    if not provided_doors:
-        LOGGER.info("Success, getting devices...")
+        
+    if not device_id:
+        LOGGER.info("Getting devices...")
 
         pairings = await client.pairings()
         if not pairings:
@@ -557,6 +581,14 @@ async def main() -> None:
 
         pairing = pairings[0]
         device_id = pairing.device_id
+        
+    if f1:
+        await client.f1(device_id)
+        exit()
+
+    provided_doors = device_id and access_ids
+    
+    if not provided_doors:
         access_ids = [
             d.access_id for d in pairing.access_door_map.values() if d.visible
         ]
