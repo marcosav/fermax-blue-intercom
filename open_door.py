@@ -218,6 +218,7 @@ class BlueClient:
 
     AUTH_URL = "https://oauth.blue.fermax.com/oauth/token"
     BASE_URL = "https://blue.fermax.com"
+    #BASE_URL = "https://blue.fermax.io"
 
     AUTH_HEADERS = {
         "Authorization": "Basic ZHB2N2lxejZlZTVtYXptMWlxOWR3MWQ0MnNseXV0NDhrajBtcDVmdm81OGo1aWg6Yzd5bGtxcHVqd2FoODV5aG5wcnYwd2R2eXp1dGxjbmt3NHN6OTBidWxkYnVsazE=",
