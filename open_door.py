@@ -218,7 +218,7 @@ class BlueClient:
 
     AUTH_URL = "https://oauth.blue.fermax.com/oauth/token"
     BASE_URL = "https://blue.fermax.com"
-    #BASE_URL = "https://blue.fermax.io"
+    # BASE_URL = "https://blue.fermax.io"
 
     AUTH_HEADERS = {
         "Authorization": "Basic ZHB2N2lxejZlZTVtYXptMWlxOWR3MWQ0MnNseXV0NDhrajBtcDVmdm81OGo1aWg6Yzd5bGtxcHVqd2FoODV5aG5wcnYwd2R2eXp1dGxjbmt3NHN6OTBidWxkYnVsazE=",
@@ -256,7 +256,8 @@ class BlueClient:
     def needs_refresh(self):
         return (
             not self._token_data
-            or datetime.datetime.utcnow() >= self._token_data.expires_at
+            or datetime.datetime.now(tz=datetime.timezone.utc)
+            >= self._token_data.expires_at
         )
 
     @staticmethod
@@ -303,7 +304,7 @@ class BlueClient:
         return not self._token_data
 
     def _parse_token(self, response: OAuthTokenResponse) -> TokenData:
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
 
         return TokenData(
             access_token=response.access_token,
@@ -545,7 +546,7 @@ async def main() -> None:
         action="store_true",
         help="Calls F1 (optionally specifying deviceId)",
     )
-    
+
     args = parser.parse_args()
 
     username = args.username
@@ -557,7 +558,9 @@ async def main() -> None:
     f1 = args.f1
 
     if (not f1) and ((device_id and not access_ids) or (access_ids and not device_id)):
-        raise Exception("Both deviceId and accessId must be provided when opening doors")
+        raise Exception(
+            "Both deviceId and accessId must be provided when opening doors"
+        )
 
     if access_ids:
         access_ids = [json.loads(access_id) for access_id in access_ids]
@@ -572,7 +575,7 @@ async def main() -> None:
 
     if reauth:
         exit()
-        
+
     if not device_id:
         LOGGER.info("Getting devices...")
 
@@ -582,13 +585,13 @@ async def main() -> None:
 
         pairing = pairings[0]
         device_id = pairing.device_id
-        
+
     if f1:
         await client.f1(device_id)
         exit()
 
     provided_doors = device_id and access_ids
-    
+
     if not provided_doors:
         access_ids = [
             d.access_id for d in pairing.access_door_map.values() if d.visible
