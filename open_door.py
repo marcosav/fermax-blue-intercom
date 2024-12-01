@@ -241,9 +241,9 @@ class BlueClient:
         try:
             with open(cache_file_path, "r") as file:
                 cached_content = json.load(file)
-                cached_content["expires_at"] = datetime.datetime.fromisoformat(
-                    cached_content["expires_at"]
-                )
+                expiration_date = datetime.datetime.fromisoformat(cached_content["expires_at"])
+                expiration_date = expiration_date.replace(tzinfo=datetime.timezone.utc)
+                cached_content["expires_at"] = expiration_date
 
                 self._token_data = TokenData(**cached_content)
 
