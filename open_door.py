@@ -10,6 +10,12 @@ import httpx
 
 from types import SimpleNamespace
 
+# Configuración de logging por defecto: se muestra solo WARNING o superior (INFO no se mostrará)
+logging.basicConfig(
+    level=logging.WARNING,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 LOGGER = logging.getLogger("fermax_blue")
 
 CACHE_FILENAME = "portal_cache.json"
@@ -227,11 +233,12 @@ class BlueClient:
 
     def __init__(self, cache: bool = True):
         self._cache = cache
-
         self._token_data: Optional[TokenData] = None
+        self._cached_device_id: Optional[str] = None
+        self._cached_access_ids: Optional[list] = None
 
         if self._cache:
-            self._load_cached_token()
+            self._load_cached_data()
 
     def _save_token(self, token_data: TokenData):
         with open(cache_file_path, "w") as file:
@@ -509,6 +516,45 @@ class BlueClient:
         else:
             self._handle_error_response(response)
 
+    def _load_cached_data(self):
+        try:
+            with open(cache_file_path, "r") as file:
+                cache_content = json.load(file)
+            token_data = cache_content.get("token_data")
+            if token_data:
+                expiration_date = datetime.datetime.fromisoformat(token_data["expires_at"])
+                expiration_date = expiration_date.replace(tzinfo=datetime.timezone.utc)
+                token_data["expires_at"] = expiration_date
+                self._token_data = TokenData(**token_data)
+                LOGGER.info("Cached token loaded successfully.")
+            device_data = cache_content.get("device_data")
+            if device_data:
+                self._cached_device_id = device_data.get("device_id")
+                self._cached_access_ids = device_data.get("access_ids")
+        except FileNotFoundError:
+            LOGGER.info("Cache file not found.")
+        except Exception as e:
+            LOGGER.info(f"Error loading cache file: {e}")
+
+    def _save_cache(self):
+        cache_content = {}
+        if os.path.exists(cache_file_path):
+            try:
+                with open(cache_file_path, "r") as file:
+                    cache_content = json.load(file)
+            except Exception:
+                pass
+        if self._token_data:
+            cache_content["token_data"] = self._token_data.__dict__.copy()
+            cache_content["token_data"]["expires_at"] = self._token_data.expires_at.isoformat()
+        if self._cached_device_id and self._cached_access_ids:
+            cache_content["device_data"] = {
+                "device_id": self._cached_device_id,
+                "access_ids": self._cached_access_ids,
+            }
+        with open(cache_file_path, "w") as file:
+            json.dump(cache_content, file)
+
 
 async def main() -> None:
 
@@ -546,8 +592,16 @@ async def main() -> None:
         action="store_true",
         help="Calls F1 (optionally specifying deviceId)",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Displays detailed INFO-level logging messages"
+    )
 
     args = parser.parse_args()
+
+    if args.verbose:
+        logging.getLogger().setLevel(logging.INFO)
 
     username = args.username
     password = args.password
@@ -559,7 +613,7 @@ async def main() -> None:
 
     if (not f1) and ((device_id and not access_ids) or (access_ids and not device_id)):
         raise Exception(
-            "Both deviceId and accessId must be provided when opening doors"
+            "Both deviceId and accessId must be provided when opening doors."
         )
 
     if access_ids:
@@ -569,65 +623,45 @@ async def main() -> None:
 
     if client.needs_auth():
         await client.auth(username, password)
-
     elif client.needs_refresh():
         await client.refresh_token()
 
     if reauth:
         exit()
 
+    # Handling device_id and access_ids using the cache
     if not device_id:
-        LOGGER.info("Getting devices...")
-
-        pairings = await client.pairings()
-        if not pairings:
-            raise Exception("No pairings found")
-
-        pairing = pairings[0]
-        device_id = pairing.device_id
+        if client._cached_device_id and client._cached_access_ids:
+            device_id = client._cached_device_id
+            access_ids = client._cached_access_ids
+            LOGGER.info(f"Using cache: device_id={device_id}, access_ids={access_ids}")
+        else:
+            LOGGER.info("Fetching devices...")
+            pairings = await client.pairings()
+            if not pairings:
+                raise Exception("No pairings found.")
+            pairing = pairings[0]
+            device_id = pairing.device_id
+            access_ids = [d.access_id.__dict__ for d in pairing.access_door_map.values() if d.visible]
+            if client._cache and device_id and access_ids:
+                client._cached_device_id = device_id
+                client._cached_access_ids = access_ids
+                client._save_cache()
+    else:
+        LOGGER.info(f"Using provided deviceId and accessId: {device_id}, {[str(a) for a in access_ids]}")
 
     if f1:
         await client.f1(device_id)
         exit()
 
-    provided_doors = device_id and access_ids
-
-    if not provided_doors:
-        access_ids = [
-            d.access_id for d in pairing.access_door_map.values() if d.visible
-        ]
-
-        if len(pairings) > 1:
-            LOGGER.info(
-                f"Found multiple pairings, opening first one {pairing.tag} with deviceId "
-                f"{pairing.device_id} ({len(access_ids)} doors), use --deviceId and --accessId "
-                f"to specify which one to use."
-            )
-        else:
-            LOGGER.info(
-                f"Found {pairing.tag} with deviceId {pairing.device_id} ({len(access_ids)} "
-                f"doors), calling directed opendoor for the first one..."
-            )
-
-    else:
-        LOGGER.info(
-            f"Success, using provided deviceId {device_id}, calling directed opendoor..."
+    # Open doors (it is assumed that device_id and access_ids are always available)
+    for access_id_json in access_ids:
+        access_id = AccessId(
+            block=access_id_json["block"],
+            subblock=access_id_json["subblock"],
+            number=access_id_json["number"],
         )
-
-    # If user provided doors we open them all
-    if provided_doors:
-        for access_id_json in access_ids:
-            access_id = AccessId(
-                block=access_id_json["block"],
-                subblock=access_id_json["subblock"],
-                number=access_id_json["number"],
-            )
-            result = await client.directed_opendoor(device_id, access_id)
-            LOGGER.info(f"Result: {result}")
-
-    # Otherwise we just open the first one (ZERO?)
-    else:
-        result = await client.directed_opendoor(device_id, access_ids[0])
+        result = await client.directed_opendoor(device_id, access_id)
         LOGGER.info(f"Result: {result}")
 
 

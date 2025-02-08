@@ -17,6 +17,7 @@
 -   `--no-cache`: Optional. Disables auth token cache usage (read/write).
 -   `--reauth`: Optional. Use it to just force reauth, when using this option no door will be open, just use it to refresh the token, check your credentials...
 -   `--f1`: Optional. Calls the F1 function, optionally specify deviceId.
+-   `--verbose`: Optional. Enable logging at INFO level.
 
 ## Examples
 
