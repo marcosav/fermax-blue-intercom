@@ -216,8 +216,8 @@ class BlueClient:
         "app-build": "3",
     }
 
-    AUTH_URL = "https://oauth.blue.fermax.com/oauth/token"
-    BASE_URL = "https://blue.fermax.com"
+    AUTH_URL = "https://oauth-pro-duoxme.fermax.io/oauth/token"
+    BASE_URL = "https://pro-duoxme.fermax.io"
     # BASE_URL = "https://blue.fermax.io"
 
     AUTH_HEADERS = {
