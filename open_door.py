@@ -546,6 +546,13 @@ async def main() -> None:
         action="store_true",
         help="Calls F1 (optionally specifying deviceId)",
     )
+    parser.add_argument(
+        "--skip-visibility",
+        action="store_true",
+        default=False,
+        dest="skip_visibility",
+        help="Includes doors that are not flagged as visible",
+    )
 
     args = parser.parse_args()
 
@@ -556,6 +563,7 @@ async def main() -> None:
     cache = args.cache
     reauth = args.reauth
     f1 = args.f1
+    skip_visibility = args.skip_visibility
 
     if (not f1) and ((device_id and not access_ids) or (access_ids and not device_id)):
         raise Exception(
@@ -594,8 +602,16 @@ async def main() -> None:
 
     if not provided_doors:
         access_ids = [
-            d.access_id for d in pairing.access_door_map.values() if d.visible
+            d.access_id
+            for d in pairing.access_door_map.values()
+            if skip_visibility or d.visible
         ]
+
+        if not access_ids:
+            raise Exception(
+                f"No doors found for pairing {pairing.tag} with deviceId "
+                f"{pairing.device_id}, try --skip-visibility"
+            )
 
         if len(pairings) > 1:
             LOGGER.info(
