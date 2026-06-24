@@ -10,13 +10,14 @@
 
 ## Arguments
 
--   `--username`: Required. Fermax Blue account username.
--   `--password`: Required. Fermax Blue account password.
--   `--deviceId`: Optional. Device ID to avoid extra fetching (requires accessId when opening doors).
--   `--accessId`: Optional. Access ID(s) to avoid extra fetching (use with deviceId).
--   `--no-cache`: Optional. Disables auth token cache usage (read/write).
--   `--reauth`: Optional. Use it to just force reauth, when using this option no door will be open, just use it to refresh the token, check your credentials...
--   `--f1`: Optional. Calls the F1 function, optionally specify deviceId.
+- `--username`: Required. Fermax Blue account username.
+- `--password`: Required. Fermax Blue account password.
+- `--deviceId`: Optional. Device ID to avoid extra fetching (requires accessId when opening doors).
+- `--accessId`: Optional. Access ID(s) to avoid extra fetching (use with deviceId).
+- `--no-cache`: Optional. Disables auth token cache usage (read/write).
+- `--reauth`: Optional. Use it to just force reauth, when using this option no door will be open, just use it to refresh the token, check your credentials...
+- `--f1`: Optional. Calls the F1 function, optionally specify deviceId.
+- `--skip-visibility`: Optional. Includes doors not flagged as visible. Use this if no doors are found with the default behaviour.
 
 ## Examples
 
@@ -26,7 +27,7 @@ You can use this script with Home Assistant using the `shell_command` integratio
 
 Save it in a directory under `config`, something like `your_home_assistant_dir/config/python_scripts/open_door.py`, then add the following to your `configuration.yaml`:
 
-*NOTE: Check how it is used in the examples below.*
+_NOTE: Check how it is used in the examples below._
 
 ```
 shell_command:
@@ -63,7 +64,13 @@ open_door.py --username email@domain.com --password yourpassword --deviceId 1234
 open_door.py --username email@domain.com --password yourpassword --reauth
 ```
 
-### F1 *(not properly tested)*
+### Opening first door ignoring visibility flag
+
+```bash
+open_door.py --username email@domain.com --password yourpassword --skip-visibility
+```
+
+### F1 _(not properly tested)_
 
 ```bash
 open_door.py --username email@domain.com --password yourpassword --f1
